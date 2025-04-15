@@ -38,9 +38,11 @@ func check(err error, label string) {
 func main() {
 	// If a message was supplied use the write program instead
 	xargs := os.Args[1:]
-	code := hello
+	var code []byte
 	if len(xargs) > 0 {
-		code = write
+		code = write[:24] // 6 instructions at 32 bits each this is how small it can be
+	} else {
+		code = hello[:45] // 6 instructions + 21 characters in our string
 	}
 
 	// map page of memory for us to load our binary code into
