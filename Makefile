@@ -1,9 +1,12 @@
 .PHONY: asm
 
-run: asm
+help: ## Show this help.
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+%?:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+run: asm ## Run the jit with just the ./asm/hello.s executed.
 	@go run main.go
 
-asm:
+asm: clean ## build the asm files that are embedded into the JIT
 	@mkdir -p ./build
 	@as -o ./build/hello.o ./asm/hello.s
 	@as -o ./build/write.o ./asm/write.s
@@ -20,10 +23,13 @@ asm:
 		| grep -o "\d*" \
 		| xargs -n1 -I% dd if=./build/write.bin of=./build/write_flat.bin ibs=% skip=1 2>/dev/null
 
-# not needed right now
-jit: entitlements
-	@go build -o jit .
-	@codesign -s - -f --entitlements jit.entitlements jit
+clean:
+	@rm -rf ./build
 
-entitlements:
-	@rm -f ./jit.entitlements && /usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-jit bool true" jit.entitlements
+# not needed right now as it seems like we are able to execute JIT code without
+# needing this entitlement right now.
+jit: asm ## build and codesign the application with the com.apple.security.cs.allow-jit entitlement
+	@/usr/libexec/PlistBuddy -c "Add :com.apple.security.cs.allow-jit bool true" ./build/jit.entitlements 2>/dev/null
+	@go build -o ./build/jit .
+	@codesign -s - -f --entitlements ./build/jit.entitlements ./build/jit 2>/dev/null
+	@./build/jit
