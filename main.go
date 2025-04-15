@@ -20,13 +20,24 @@ var (
 	hello []byte
 	//go:embed build/write_flat.bin
 	write []byte
+	debug = os.Getenv("DEBUG") != ""
 )
 
-func main() {
-	xargs := os.Args[1:]
-	msg := strings.Join(xargs, " ") + "\n"
+func printDbg(msg string, args ...any) {
+	if debug {
+		fmt.Printf(msg+"\n", args...)
+	}
+}
 
+func check(err error, label string) {
+	if err != nil {
+		log.Fatal("ERR "+label+" : ", err)
+	}
+}
+
+func main() {
 	// If a message was supplied use the write program instead
+	xargs := os.Args[1:]
 	code := hello
 	if len(xargs) > 0 {
 		code = write
@@ -40,41 +51,38 @@ func main() {
 	//			we are not using a file it should definitely not be shared
 	//		Anon: indicates we are operating on a virtual file and not a real file.
 	//		JIT: This is hinting to the OS that we are using this for JIT purposes.
-	fmt.Printf("mapping %v bytes\n", len(code))
+	printDbg("mapping %v bytes", len(code))
 	fn, err := syscall.Mmap(-1, 0, len(code), syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_PRIVATE|syscall.MAP_ANON|syscall.MAP_JIT)
-	if err != nil {
-		log.Fatalf("mmap err: %v", err)
-	}
+	check(err, "mmap")
 
 	// put our code into the mmaped memory
 	n := copy(fn, code)
-	fmt.Printf("copied %v bytes into memory\n", n)
+	printDbg("copied %v bytes into memory", n)
 
 	// Change the protections of our memory from RW to RX now that we no longer need
 	// to modify it. This allows us to execute the code in this memory.
-	fmt.Println("making memory executable")
-	if err = syscall.Mprotect(fn, syscall.PROT_READ|syscall.PROT_EXEC); err != nil {
-		log.Fatalf("mprotect err: %v", err)
-	}
+	printDbg("making memory executable")
+	err = syscall.Mprotect(fn, syscall.PROT_READ|syscall.PROT_EXEC)
+	check(err, "mprotect")
 
 	// Convert our memory from a byte array to an executable function with some
 	// very unsafe memory handling.
-	fmt.Println("calling jit function")
-	fmt.Println("====================")
+	printDbg("calling jit function")
+	printDbg("====================")
 	unsafeFunc := (uintptr)(unsafe.Pointer(&fn))
 	if len(xargs) == 0 {
 		f := *(*execFunc)(unsafe.Pointer(&unsafeFunc))
 		f()
 	} else {
+		msg := strings.Join(xargs, " ") + "\n"
 		f := *(*writeFunc)(unsafe.Pointer(&unsafeFunc))
 		f(msg, uint(len(msg)))
 	}
-	fmt.Println("====================")
+	printDbg("====================")
 
 	// Unmap the memory that we mapped to release it from the application.
-	fmt.Println("unmapping memory")
-	if err := syscall.Munmap(fn); err != nil {
-		log.Fatalf("munmap err: %v", err)
-	}
-	fmt.Println("done.")
+	printDbg("unmapping memory")
+	err = syscall.Munmap(fn)
+	check(err, "munmap")
+	printDbg("done.")
 }

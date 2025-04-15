@@ -6,6 +6,9 @@ help: ## Show this help.
 run: asm ## Run the jit with just the ./asm/hello.s executed.
 	@go run main.go
 
+debug: asm ## Run the jit with debug logging enabled
+	@DEBUG=1 go run main.go
+
 asm: clean ## build the asm files that are embedded into the JIT
 	@mkdir -p ./build
 	@as -o ./build/hello.o ./asm/hello.s
