@@ -18,18 +18,16 @@ type (
 var (
 	//go:embed build/hello_flat.bin
 	hello []byte
-	//go:embed build/write_flat.bin
-	write []byte
 	debug = os.Getenv("DEBUG") != ""
 	// Actual raw bytes of the binary form of write.s
-	// this will actually work if you substitute it below where code is assigned
-	writeRaw = []byte{
-		0xE2, 0x03, 0x01, 0xAA,
-		0xE1, 0x03, 0x00, 0xAA,
-		0x20, 0x00, 0x80, 0xD2,
-		0x90, 0x00, 0x80, 0xD2,
-		0x01, 0x10, 0x00, 0xD4,
-		0xC0, 0x03, 0x5F, 0xD6,
+	// use bin_to_go.go to extract it from the file
+	write = []byte{
+		0xE2, 0x03, 0x01, 0xAA, // mov x2, x1; save msg length received from caller in x4
+		0xE1, 0x03, 0x00, 0xAA, // mov x1, x0; save msg received from caller in x3
+		0x20, 0x00, 0x80, 0xD2, // mov x0, #1; 1 -> stdout
+		0x90, 0x00, 0x80, 0xD2, // mov x16, #4; 4 -> write syscall
+		0x01, 0x00, 0x00, 0xD4, // svc 0;  Call kernel to output the string
+		0xC0, 0x03, 0x5F, 0xD6, // ret
 	}
 )
 
@@ -50,7 +48,7 @@ func main() {
 	xargs := os.Args[1:]
 	var code []byte
 	if len(xargs) > 0 {
-		code = write[:24] // 6 instructions at 32 bits each this is how small it can be
+		code = write // 6 instructions at 32 bits each this is how small it can be
 	} else {
 		code = hello[:45] // 6 instructions + 21 characters in our string
 	}
